@@ -1,0 +1,19 @@
+# config.yaml
+device:
+  ip: 192.168.157.254
+  port: 80
+  username: admin
+  password: Seven77@chan
+  login_retry: 3
+
+log:
+  name: ikuai
+  log_file: ikuai.logs
+  level: INFO
+  max_bytes: 10485760     # 10MB
+  backup_count: 3
+
+exporter:
+  enabled: true
+  port: 8000
+  interval: 15
