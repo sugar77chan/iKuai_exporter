@@ -1,11 +1,27 @@
 import time
 import logging
 import importlib
-import inspect
 import pkgutil
-from http_handler import run_http_server
-
+import inspect
 import ikuai_exporter
+from ikuai_exporter.base_exporter import BaseExporter
+from prometheus_client import start_http_server
+
+
+def load_exporters(session, call_url, logger_name):
+    collectors = []
+    logger = logging.getLogger(logger_name)
+
+    for _, module_name, _ in pkgutil.iter_modules(ikuai_exporter.__path__):
+        full_module_name = f"ikuai_exporter.{module_name}"
+        module = importlib.import_module(full_module_name)
+
+        for name, cls in inspect.getmembers(module, inspect.isclass):
+            # 只实例化继承自 BaseExporter 的子类，但排除 BaseExporter 自身
+            if issubclass(cls, BaseExporter) and cls is not BaseExporter:
+                logger.info(f"加载监控器: {name} 来自 {full_module_name}")
+                collectors.append(cls(session, call_url, logger_name))
+    return collectors
 
 
 class ExporterManager:
@@ -14,36 +30,11 @@ class ExporterManager:
         self.call_url = call_url
         self.logger = logging.getLogger(logger_name)
         self.exporter_cfg = exporter_cfg
-        self.logger_name = logger_name
-        self.collectors = []
-
-        self._load_exporters()
-
-    def _load_exporters(self):
-        package = ikuai_exporter
-        prefix = package.__name__ + "."
-
-        for _, modname, ispkg in pkgutil.iter_modules(package.__path__, prefix):
-            if ispkg:
-                continue
-            try:
-                module = importlib.import_module(modname)
-            except Exception as e:
-                self.logger.warning(f"无法导入模块 {modname}: {e}")
-                continue
-
-            for name, obj in inspect.getmembers(module, inspect.isclass):
-                if name.endswith("Exporter") and callable(getattr(obj, "fetch_and_collect", None)):
-                    try:
-                        instance = obj(self.session, self.call_url, self.logger_name)
-                        self.collectors.append(instance)
-                        self.logger.info(f"加载监控器: {name} 来自 {modname}")
-                    except Exception as e:
-                        self.logger.error(f"实例化 {name} 失败: {e}")
+        self.collectors = load_exporters(session, call_url, logger_name)
 
     def run_forever(self, interval):
         port = self.exporter_cfg.get("port", 8000)
-        run_http_server(port)
+        start_http_server(port)
         self.logger.info(f"Prometheus HTTP 服务启动，监听端口 {port}")
 
         while True:

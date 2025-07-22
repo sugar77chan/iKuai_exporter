@@ -1,12 +1,10 @@
-import logging
 from prometheus_client import Gauge
+from ikuai_exporter.base_exporter import BaseExporter
 
 
-class TerminalMetricsExporter:
+class TerminalMetricsExporter(BaseExporter):
     def __init__(self, session, call_url, logger_name):
-        self.session = session
-        self.call_url = call_url
-        self.logger = logging.getLogger(logger_name)
+        super().__init__(session, call_url, logger_name)
 
         self.upload_metric = Gauge(
             "ikuai_terminal_upload_bytes",
@@ -30,7 +28,6 @@ class TerminalMetricsExporter:
         )
 
     def fetch_and_collect(self):
-        self.logger.info(f"[采集] 开始从 iKuai 路由器拉取 terminal 数据")
         try:
             payload = {
                 "func_name": "monitor_lanip",
@@ -40,7 +37,7 @@ class TerminalMetricsExporter:
                     "ORDER": "",
                     "ORDER_BY": "ip_addr_int",
                     "TYPE": "data,total",
-                    "limit": "0,20",
+                    "limit": "0,100",
                     "orderType": "IP"
                 }
             }
@@ -59,18 +56,10 @@ class TerminalMetricsExporter:
                 ip = terminal.get("ip_addr", "")
                 if not ip:
                     continue
-                try:
-                    upload = float(terminal.get("upload", 0))
-                except Exception:
-                    upload = 0.0
-                try:
-                    download = float(terminal.get("download", 0))
-                except Exception:
-                    download = 0.0
-                try:
-                    connect_num = float(terminal.get("connect_num", 0))
-                except Exception:
-                    connect_num = 0.0
+
+                upload = self.safe_float(terminal.get("upload"))
+                download = self.safe_float(terminal.get("download"))
+                connect_num = self.safe_float(terminal.get("connect_num"))
 
                 self.upload_metric.labels(ip=ip, unit="bytes").set(upload)
                 self.download_metric.labels(ip=ip, unit="bytes").set(download)

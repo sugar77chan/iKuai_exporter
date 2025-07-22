@@ -1,12 +1,10 @@
-import logging
 from prometheus_client import Gauge
+from ikuai_exporter.base_exporter import BaseExporter
 
 
-class IfaceMetricsExporter:
+class IfaceMetricsExporter(BaseExporter):
     def __init__(self, session, call_url, logger_name):
-        self.session = session
-        self.call_url = call_url
-        self.logger = logging.getLogger(logger_name)
+        super().__init__(session, call_url, logger_name)
 
         self.iface_check_status = Gauge(
             "ikuai_iface_check_status",
@@ -39,15 +37,7 @@ class IfaceMetricsExporter:
             labelnames=["interface", "unit"]
         )
 
-    @staticmethod
-    def safe_float(val):
-        try:
-            return float(val)
-        except (ValueError, TypeError):
-            return 0.0
-
     def fetch_and_collect(self):
-        self.logger.info(f"[采集] 开始从 iKuai 路由器拉取 iface 数据")
         try:
             payload = {
                 "func_name": "monitor_iface",
@@ -83,10 +73,7 @@ class IfaceMetricsExporter:
                     self.safe_float(item.get("total_down", 0)))
 
                 connect_num_val = item.get("connect_num", "0")
-                try:
-                    connect_num = float(connect_num_val) if connect_num_val != "--" else 0.0
-                except (ValueError, TypeError):
-                    connect_num = 0.0
+                connect_num = self.safe_float(connect_num_val, 0.0) if connect_num_val != "--" else 0.0
                 self.iface_stream_connect_num.labels(interface=iface, unit="count").set(connect_num)
 
         except Exception as e:

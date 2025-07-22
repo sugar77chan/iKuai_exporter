@@ -1,12 +1,10 @@
-import logging
 from prometheus_client import Gauge
+from ikuai_exporter.base_exporter import BaseExporter
 
 
-class SystemMetricsExporter:
+class SystemMetricsExporter(BaseExporter):
     def __init__(self, session, call_url, logger_name):
-        self.session = session
-        self.call_url = call_url
-        self.logger = logging.getLogger(logger_name)
+        super().__init__(session, call_url, logger_name)
 
         self.cpu_metric = Gauge(
             "ikuai_cpu_usage_percent", "CPU usage percent", labelnames=["core", "unit"]
@@ -27,7 +25,6 @@ class SystemMetricsExporter:
         self.version_set = False
 
     def fetch_and_collect(self):
-        self.logger.info(f"[采集] 开始从 iKuai 路由器拉取 sysstat 数据")
         try:
             payload = {
                 "func_name": "sysstat",
@@ -45,40 +42,25 @@ class SystemMetricsExporter:
             sys_data = data.get("Data", {})
 
             # CPU
-            cpu_list = sys_data.get("cpu", [])
-            for i, value in enumerate(cpu_list):
-                try:
-                    usage = float(value.strip('%')) if isinstance(value, str) else float(value)
-                except Exception:
-                    usage = 0.0
+            for i, value in enumerate(sys_data.get("cpu", [])):
+                usage = self.safe_float(value.strip('%') if isinstance(value, str) else value)
                 core_label = "all" if i == 0 else f"core{i - 1}"
                 self.cpu_metric.labels(core=core_label, unit="percent").set(usage)
 
             # Memory
-            memory = sys_data.get("memory", {})
-            for key, value in memory.items():
+            for key, value in sys_data.get("memory", {}).items():
                 if key == "used":
-                    try:
-                        used_percent = float(value.strip('%')) if isinstance(value, str) else float(value)
-                    except Exception:
-                        used_percent = 0.0
+                    used_percent = self.safe_float(value.strip('%') if isinstance(value, str) else value)
                     self.memory_used_percent_metric.labels(type=key, unit="percent").set(used_percent)
                 else:
-                    try:
-                        self.memory_metric.labels(type=key, unit="KB").set(float(value))
-                    except Exception:
-                        self.memory_metric.labels(type=key, unit="KB").set(0)
+                    self.memory_metric.labels(type=key, unit="KB").set(self.safe_float(value))
 
             # Stream
-            stream = sys_data.get("stream", {})
-            for key, value in stream.items():
+            for key, value in sys_data.get("stream", {}).items():
                 unit = "count" if key == "connect_num" else "bytes"
-                try:
-                    self.stream_metric.labels(type=key, unit=unit).set(float(value))
-                except Exception:
-                    self.stream_metric.labels(type=key, unit=unit).set(0)
+                self.stream_metric.labels(type=key, unit=unit).set(self.safe_float(value))
 
-            # Version
+            # Version（只记录一次）
             if not self.version_set and "verinfo" in sys_data:
                 verinfo = sys_data["verinfo"]
                 self.version_metric.labels(
