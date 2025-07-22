@@ -13,9 +13,16 @@
 - 支持模块化配置和插件式采集器扩展
 - 抽取配置文件，可以在配置文件中配置ikuai路由器的连接信息、exporter使用的端口、日志相关信息
 
-## 📦 安装
+##  安装
 
 ```bash
 git clone https://github.com/yourname/ikuai-exporter.git
 cd ikuai-exporter
 pip install -r requirements.txt
+```
+
+## 贡献
+欢迎提交 Issues 和 Pull Requests。
+
+## 许可证
+MIT License
